@@ -114,7 +114,6 @@ def main(args):
         print('###########################################################')
 
         image = cv2.imread(os.path.join(test_path, f))
-        image = cv2.resize(image, (1280, int(image.shape[0]/image.shape[1]*1280)))    # Resize image into 1280*720 to prevent CUDA OOM
 
         try_old_method = False
         try:
@@ -128,6 +127,9 @@ def main(args):
                 length_per_pixel = coord_x[1] - coord_x[0]
             except:
                 length_per_pixel = find_apriltag(image)
+
+        image = cv2.resize(image, (1280, int(image.shape[0]/image.shape[1]*1280)))    # Resize image into 1280*720 to prevent CUDA OOM
+        length_per_pixel = length_per_pixel / image.shape[1] * 1280
 
         im_list = [image]
         x_window_size = image.shape[1]
