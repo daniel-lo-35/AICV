@@ -50,14 +50,14 @@ def del_tensor_ele(arr,index):
 def main(args):
     start = time.time()
 
-    register_coco_instances("2019_train", {}, "../DA-MRCNN/2019_train/annotations_train.json", "../DA-MRCNN/2019_train")
-    register_coco_instances("2019_val", {}, "../DA-MRCNN/2019_val/annotations_val.json", "../DA-MRCNN/2019_val")
-    # register_coco_instances("2019_da", {}, "./2019_da/annotations_train.json", "./2019_da")
-    # register_coco_instances("2019_da_val", {}, "./2019_da_val/annotations_val.json", "./2019_da_val")
+    # register_coco_instances("2019_train", {}, "../DA-MRCNN/2019_train/annotations_train.json", "../DA-MRCNN/2019_train")
+    # register_coco_instances("2019_val", {}, "../DA-MRCNN/2019_val/annotations_val.json", "../DA-MRCNN/2019_val")
+    # # register_coco_instances("2019_da", {}, "./2019_da/annotations_train.json", "./2019_da")
+    # # register_coco_instances("2019_da_val", {}, "./2019_da_val/annotations_val.json", "./2019_da_val")
 
-    # register_coco_instances("2021_test", {}, "./2021_test/annotations_test.json", "./2021_test")
-    # register_coco_instances("2021_da", {}, "./2021_da/annotations_train.json", "./2021_da")
-    # register_coco_instances("2021_da_val", {}, "./2021_da_val/annotations_val.json", "./2021_da_val")
+    # # register_coco_instances("2021_test", {}, "./2021_test/annotations_test.json", "./2021_test")
+    # # register_coco_instances("2021_da", {}, "./2021_da/annotations_train.json", "./2021_da")
+    # # register_coco_instances("2021_da_val", {}, "./2021_da_val/annotations_val.json", "./2021_da_val")
 
     setup_logger()
     logger = logging.getLogger("detectron2")
@@ -65,8 +65,8 @@ def main(args):
     cfg_source = get_cfg()
     cfg_source.merge_from_file(model_zoo.get_config_file("COCO-InstanceSegmentation/mask_rcnn_R_101_FPN_3x.yaml"))
     # cfg_source.merge_from_file(model_zoo.get_config_file("new_baselines/mask_rcnn_R_101_FPN_400ep_LSJ.py"))
-    cfg_source.DATASETS.TRAIN = ("2019_train",)
-    cfg_source.DATASETS.TEST = ("2019_val",)
+    # cfg_source.DATASETS.TRAIN = ("2019_train",)
+    # cfg_source.DATASETS.TEST = ("2019_val",)
     cfg_source.DATALOADER.NUM_WORKERS = 2
     cfg_source.MODEL.WEIGHTS = model_zoo.get_checkpoint_url("COCO-InstanceSegmentation/mask_rcnn_R_101_FPN_3x.yaml")
     # cfg_source.MODEL.WEIGHTS = model_zoo.get_checkpoint_url("new_baselines/mask_rcnn_R_101_FPN_400ep_LSJ.py")
