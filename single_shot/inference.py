@@ -631,7 +631,7 @@ def find_nearest_link(juncs, lines, line_masks=None,
                     links.append(juncs[[i, j]].numpy().tolist())
         
         # E2E link prediction
-        elif e2e_on:
+        if e2e_on:
             dist_ei, dist_ej = cdist(line, lines.view(-1, 2), metric='euclidean')
             if e2j_dist_matrix[0, i] < max_e2j_dist:
                 for ej in np.where((0 < dist_ej) & (dist_ej < max_e2e_dist))[0]:
