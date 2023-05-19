@@ -177,7 +177,7 @@ def main(args):
                 junctions = find_centroid_by_box(pred_boxes[pred_classes==0].to(torch.device("cpu")))
                 enpoints, line_masks = find_endpoint_by_box(pred_boxes[pred_classes==1].to(torch.device("cpu")))
 
-                if junctions.shape[0] > 0 and enpoints.shape[0] > 0:
+                if enpoints.shape[0] > 0:
                     links = find_nearest_link(
                         junctions, enpoints,
                         # line_masks=line_masks,    # <BUG> THIS ONE IS BUGGYYYYYYYYYYYYYYYYYYYYYY
@@ -254,7 +254,7 @@ def main(args):
             junctions = find_centroid_by_box(pred_boxes_final[pred_classes_final==0].to(torch.device("cpu")))
             enpoints, line_masks = find_endpoint_by_box(pred_boxes_final[pred_classes_final==1].to(torch.device("cpu")))
 
-            if junctions.shape[0] > 0 and enpoints.shape[0] > 0:
+            if enpoints.shape[0] > 0:
                 links = find_nearest_link(
                     junctions, enpoints,
                     line_masks=line_masks,
@@ -613,21 +613,22 @@ def find_nearest_link(juncs, lines, line_masks=None,
     links = []
     for l, line in enumerate(lines):
         # E2J link prediction
-        e2j_dist_matrix = cdist(line, juncs, metric='euclidean')
-        i, j = e2j_dist_matrix.argsort(1)[:,0]
-        if i != j and e2j_dist_matrix[0, i] < max_e2j_dist and e2j_dist_matrix[1, j] < max_e2j_dist:
-            if line_masks is not None:
-                length = torch.linalg.norm(juncs[i]-juncs[j]).int()
-                x = torch.linspace(juncs[i][0], juncs[j][0], length).long()
-                y = torch.linspace(juncs[i][1], juncs[j][1], length).long()
-                if line_masks[l, y, x].sum() / length < path_thred:
-                    continue
+        if juncs.shape[0] > 0:
+            e2j_dist_matrix = cdist(line, juncs, metric='euclidean')
+            i, j = e2j_dist_matrix.argsort(1)[:,0]
+            if i != j and e2j_dist_matrix[0, i] < max_e2j_dist and e2j_dist_matrix[1, j] < max_e2j_dist:
+                if line_masks is not None:
+                    length = torch.linalg.norm(juncs[i]-juncs[j]).int()
+                    x = torch.linspace(juncs[i][0], juncs[j][0], length).long()
+                    y = torch.linspace(juncs[i][1], juncs[j][1], length).long()
+                    if line_masks[l, y, x].sum() / length < path_thred:
+                        continue
+                        
+                if return_index:
+                    links.append([i, j])
                     
-            if return_index:
-                links.append([i, j])
-                
-            else:
-                links.append(juncs[[i, j]].numpy().tolist())
+                else:
+                    links.append(juncs[[i, j]].numpy().tolist())
         
         # E2E link prediction
         elif e2e_on:
