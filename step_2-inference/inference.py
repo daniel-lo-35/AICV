@@ -47,6 +47,19 @@ import ezdxf
 from ezdxf.addons import r12writer
 from random import random
 
+from reportlab.lib import colors
+from reportlab.platypus import SimpleDocTemplate, Table, Paragraph, Spacer, PageBreak, Image
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.lib.enums import TA_CENTER, TA_LEFT
+import base64
+from PIL import Image as Im
+from io import BytesIO
+import json
+
+
+
 def del_tensor_ele(arr,index):
     arr1 = arr[0:index]
     arr2 = arr[index+1:]
@@ -88,7 +101,19 @@ def main(args):
     # cfg_source.MODEL.WEIGHTS = "../DA-MRCNN/pretrained_model/model_final.pth"
     # cfg_source.MODEL.WEIGHTS = "/home/r09521612/model_training/0914_rgb/model_final.pth"
     # cfg_source.MODEL.WEIGHTS = "./mrcnn_model/model_RGB_220310.pth"
-    cfg_source.MODEL.WEIGHTS = args.model_dir
+    # cfg_source.MODEL.WEIGHTS = "/home/r09521612/model_training/0803_rgb/model_final.pth"
+    # cfg_source.MODEL.WEIGHTS = "/home/r09521612/model_training/0802_rgb/model_final.pth"
+
+    if args.model_weight == "0310":    # sanying slab
+        cfg_source.MODEL.WEIGHTS = "./mrcnn_model/model_RGB_220310.pth"
+    elif args.model_weight == "0802":    # nanmen market 2f
+        cfg_source.MODEL.WEIGHTS = "/home/r09521612/model_training/0802_rgb/model_final.pth"
+    elif args.model_weight == "0803":    # ncree test slab
+        cfg_source.MODEL.WEIGHTS = "/home/r09521612/model_training/0803_rgb/model_final.pth"
+    elif args.model_weight == "0914":    # sanying staircase wall
+        cfg_source.MODEL.WEIGHTS = "/home/r09521612/model_training/0914_rgb/model_final.pth"
+    else:    # default pretrained model by SJ
+        cfg_source.MODEL.WEIGHTS = "../DA-MRCNN/pretrained_model/model_final.pth"
 
     cfg_source.MODEL.ROI_HEADS.SCORE_THRESH_TEST = 0.5  # set threshold for this model
 
@@ -255,6 +280,30 @@ def main(args):
 
             pred_masks_final = np.asarray([GenericMask(x, image.shape[0], image.shape[1]) for x in pred_masks_list])
 
+            # print()
+            # print("pred_masks_final[0].polygons:", pred_masks_final[0].polygons)
+            # print("pred_masks_final[0].polygons[0]:", pred_masks_final[0].polygons[0])
+            # for n, x in enumerate(pred_masks_final):
+            n = 0
+            # NOTE: Skipping finding the error masks, as I use box as centroid finder now
+            # while n < len(pred_masks_final):
+            #     # print("type(pred_masks_final[0].polygons):", type(pred_masks_final[0].polygons))
+            #     try:
+            #         length_test = len(pred_masks_final[n].polygons[0])
+            #     except:
+            #         print(f"ERROR OCCURED when finding len(pred_masks_final[{n}].polygons[0])!")
+            #         print('n:', n)
+            #         print(f'pred_masks_final[{n}].polygons:', pred_masks_final[n].polygons)
+            #         # del pred_masks_final[n]
+            #         pred_masks_final = np.delete(pred_masks_final, n)
+            #         # del pred_classes_final[n]
+            #         pred_classes_final = del_tensor_ele(pred_classes_final, n)
+            #         continue
+            #     if length_test <= 4:
+            #         print(f"WARNING: len(pred_masks_final[{n}].polygons[0]):", length_test)
+            #     n += 1
+            # print()
+
             print("len(pred_masks_final) AFTER CLEANING:", len(pred_masks_final))
             # assert len(pred_masks_list)  == len_masks
             assert len(pred_classes_final) == len(pred_masks_final)
@@ -262,6 +311,18 @@ def main(args):
             print('image shape:', image.shape)
             print('image shape[1]:', image.shape[1]) # x
             print('image shape[0]:', image.shape[0]) # y
+
+            # # TODO: Make combined mask photo
+            # v = Visualizer(image[:, :, ::-1],
+            #             metadata=steel_metadata, 
+            #             scale=0.5, 
+            #             # instance_mode=ColorMode.IMAGE_BW   # remove the colors of unsegmented pixels. This option is only available for segmentation models
+            # )
+            # # out = v.draw_instance_predictions(outputs["instances"].to("cpu"))
+            # out = v.overlay_instances(masks=pred_masks_final)
+            # # cv2.imshow(out.get_image()[:, :, ::-1])
+            # cv2.imwrite(os.path.join(args.output_dir, f+"_mask_final.jpg"), out.get_image()[:, :, ::-1])
+            # BUG: This visualize mask part takes too long time to run (~ 3 hours!), needs fix
 
             junctions = find_centroid_by_polygon(pred_masks_final[pred_classes_final.cpu()==0])
             enpoints, line_masks = find_endpoint_by_polygon(pred_masks_final[pred_classes_final.cpu()==1])
@@ -319,6 +380,7 @@ def main(args):
                     show_group_spacing_combined(image, _group_horizontal, _group_vertical, result_horizontal, result_vertical, args, f)
 
                 create_dxf_r12writer(image, _group_horizontal, _group_vertical, result_horizontal, result_vertical, args, f)
+                writepdf(image, _group_horizontal, _group_vertical, result_horizontal, result_vertical, args, f)
 
         end = time.time()
         print()
@@ -381,7 +443,7 @@ def print_inspection_report(args, filename, result, direction, decision=None):
             else:
                 result[result_key[i]]["outliers"] = False
     
-    report_file = os.path.join(args.output_dir, "inspection_report.txt")
+    report_file = os.path.join(args.output_dir, filename + "-inspection_report.txt")
     with open(report_file, 'a') as f:
         f.write('\n##########################################################################################')
         f.write('\n################## INSPECTION REPORT: {} (Direction: {}) ##################'.format(filename, direction))
@@ -1493,6 +1555,7 @@ def show_group_spacing_combined(background, group_horizontal, group_vertical, re
     print('Time for displaying group of spacing:', end_time-start_time, 'seconds')
 
 
+# Abandoned, use the create_dxf_r12writer function
 def create_dxf(background, group_horizontal, group_vertical, report_horizontal, report_vertical, args, filename):
     # create a new DXF R2010 document
     doc = ezdxf.new("R2010")
@@ -1511,19 +1574,208 @@ def create_dxf_r12writer(background, group_horizontal, group_vertical, report_ho
 
         n = 0
         for i, info in tqdm(report_horizontal.items()):
-            dxf.add_line((0, n), (vertical_count, n))
+            dxf.add_line((-1.5, n), (vertical_count+1.5, n), color=3)
             # dxf.add_text("{:.2f} +- {:.2f} cm".format(info["mean"], info["std"]), (0, n+0.5), align='MIDDLE_LEFT')
-            dxf.add_text(round(info["mean"], 2), (0.1, n-0.5), height=0.25, align='MIDDLE_LEFT')
+            dxf.add_text(round(info["mean"], 2), (-2.1, n-0.5), height=0.25, align='MIDDLE_RIGHT')
             n -= 1 # y-axis direction is reversed in openCV
-        dxf.add_line((0, n), (vertical_count, n))
+        dxf.add_line((-1.5, n), (vertical_count+1.5, n), color=3)
+        dxf.add_text("no. of horizontal rebars: " + str(horizontal_count+1), (vertical_count//2, 3), height=0.25, align='BOTTOM_CENTER', color=3)
 
         n = 0
+        if args.structure == 1: bottom = 0
+        else: bottom = 0.5
         for i, info in tqdm(report_vertical.items()):
-            dxf.add_line((n, 0), (n, 0-horizontal_count))
-            dxf.add_text(round(info["mean"], 2), (n+0.5, 0.1), height=0.25, align='BOTTOM_CENTER')
+            dxf.add_line((n, 1.5), (n, -1-bottom-horizontal_count), color=6)
+            dxf.add_text(round(info["mean"], 2), (n+0.5, 2.1), height=0.25, align='BOTTOM_CENTER')
             # dxf.add_text("+-{:.2f}cm".format(info["std"]), (n+0.5, 1), align='TOP_CENTER')
             n += 1
-        dxf.add_line((n, 0), (n, 0-horizontal_count))
+        dxf.add_line((n, 1.5), (n, -1-bottom-horizontal_count), color=6)
+        dxf.add_text("no. of vertical rebars: " + str(vertical_count+1), (-3, -horizontal_count//2), height=0.25, align='MIDDLE_RIGHT', color=6, rotation=90)
+
+        if args.structure == 0:    # slab
+            dxf.add_line((-1, 1), (vertical_count+1, 1), color=5)
+            dxf.add_line((-1, -1-horizontal_count), (vertical_count+1, -1-horizontal_count), color=5)
+            dxf.add_line((-1, 1), (-1, -1-horizontal_count), color=5)
+            dxf.add_line((vertical_count+1, 1), (vertical_count+1, -1-horizontal_count), color=5)
+
+            dxf.add_line((-1, 2), (vertical_count+1, 2), color=5)
+            dxf.add_line((-1, -2-horizontal_count), (vertical_count+1, -2-horizontal_count), color=5)
+            dxf.add_line((-2, 1), (-2, -1-horizontal_count), color=5)
+            dxf.add_line((vertical_count+2, 1), (vertical_count+2, -1-horizontal_count), color=5)
+
+            dxf.add_polyline_2d([(-1, 1), (-2, 1), (-2, 2), (-1, 2), (-1, 1)], color=3, closed=True)
+            dxf.add_polyline_2d([(vertical_count+1, 1), (vertical_count+2, 1), (vertical_count+2, 2), (vertical_count+1, 2), (vertical_count+1, 1)], color=3, closed=True)
+            dxf.add_polyline_2d([(-1, -1-horizontal_count), (-2, -1-horizontal_count), (-2, -2-horizontal_count), (-1, -2-horizontal_count), (-1, -1-horizontal_count)], color=3, closed=True)
+            dxf.add_polyline_2d([(vertical_count+1, -1-horizontal_count), (vertical_count+2, -1-horizontal_count), (vertical_count+2, -2-horizontal_count), (vertical_count+1, -2-horizontal_count), (vertical_count+1, -1-horizontal_count)], color=3, closed=True)
+
+        elif args.structure == 1:    # wall
+            # dxf.add_line((-1, 1), (vertical_count+1, 1), color=5)
+            # dxf.add_line((-1, -1-horizontal_count), (vertical_count+1, -1-horizontal_count), color=5)
+            # dxf.add_line((-1, 1), (-1, -1-horizontal_count), color=5)
+            # dxf.add_line((vertical_count+1, 1), (vertical_count+1, -1-horizontal_count), color=5)
+            dxf.add_polyline_2d([(-1, 1), (-1, -1-horizontal_count), (vertical_count+1, -1-horizontal_count), (vertical_count+1, 1), (-1, 1)], color=5, closed=True)
+
+        else:
+            print("You selected structure type that is not fully supported in CAD drawing: ", args.structure)
+
+
+
+def putInTable(data):
+    """To put list into a table"""
+    t = Table(data, colWidths=(90, 300),
+              style=[("BOX", (0, 0), (-1, -1), 1.5, colors.black),
+                     ("GRID", (0, 0), (-1, -1), 0.5, colors.black),
+                     ("TEXTCOLOR", (-1, -1), (-1, -1), colors.red),
+                     ("SPAN", (0, 0), (1, 0))])
+    return t
+
+# def writepdf(filename, data):
+def writepdf(background, group_horizontal, group_vertical, report_horizontal, report_vertical, args, filename, report_data=None):
+    doc = SimpleDocTemplate(os.path.join(args.output_dir, filename + "-Digital_Report.pdf"))
+    element = []
+    styles = getSampleStyleSheet()
+    sty = ParagraphStyle(name='Heading1', alignment=TA_LEFT)
+    titleStyle = ParagraphStyle(name='Heading2', alignment=TA_CENTER, spaceBefore=0, fontSize=24)
+    chTitleStyle = ParagraphStyle(name='Heading4', alignment=TA_CENTER, spaceBefore=0, fontSize=24, fontName="zh")
+    subtitleStyle = ParagraphStyle(name='Heading3', alignment=TA_LEFT, leftIndent=10, fontSize=18, fontName='zh')
+    contentstyle = ParagraphStyle(name='Normal', fontName='kai')
+    contentstyle1 = ParagraphStyle(name='Normal', fontName='zh', fontSize=11, alignment=TA_CENTER)
+    pdfmetrics.registerFont(TTFont('kai', "./font/kaiu.ttf"))
+    # pdfmetrics.registerFont(TTFont('zh', "./font/DFFN_K7.TTC"))    # Has error while installing, so abandoned
+    pdfmetrics.registerFont(TTFont('zh', "./font/kaiu.ttf"))
+
+    # Title and request
+    if report_data:
+        data = report_data
+    else:
+        data = {
+            "\u57fa\u672c\u8cc7\u6599": {
+                "\u5de5\u7a0b\u540d\u7a31": "\u5de5\u7a0b\u540d\u7a31",
+                "\u7de8\u865f": "G-LB10-04-022",
+                "\u5206\u9805\u5de5\u7a0b\u540d\u7a31": "CS32",
+                "\u6aa2\u67e5\u4f4d\u7f6e": "DP2-1\u5c64\u92fc\u7b4b\u67e5\u9a57(\u570d\u675f\u5340)",
+                "\u6aa2\u67e5\u65e5\u671f": 20180807
+            }
+        }    # TODO: Unicode is hard to read, change them to english!!!!!!
+
+    Title = Paragraph("<b>AIiS</b> \u67e5\u9a57\u5831\u544a", chTitleStyle)    # AIiS 查驗報告
+    P0 = [[Paragraph("\u5de5\u7a0b\u540d\u7a31", contentstyle),    # 工程名稱
+           Paragraph(data["\u57fa\u672c\u8cc7\u6599"]["\u5de5\u7a0b\u540d\u7a31"], contentstyle)],    # 基本資料 工程名稱
+          [Paragraph("\u6587\u4ef6\u7de8\u865f", contentstyle),    # 文件編號
+           Paragraph(data["\u57fa\u672c\u8cc7\u6599"]["\u7de8\u865f"], contentstyle)],    # 基本資料 編號
+          [Paragraph("\u5206\u9805\u5de5\u7a0b\u540d\u7a31", contentstyle),    # 分項工程名稱
+           Paragraph(data["\u57fa\u672c\u8cc7\u6599"]["\u5206\u9805\u5de5\u7a0b\u540d\u7a31"], contentstyle)],    # 基本資料 分項工程名稱
+          [Paragraph("\u6aa2\u67e5\u4f4d\u7f6e", contentstyle),    # 檢查位置
+           Paragraph(data["\u57fa\u672c\u8cc7\u6599"]["\u6aa2\u67e5\u4f4d\u7f6e"], contentstyle)],    # 基本資料 檢查位置
+          [Paragraph("\u6aa2\u67e5\u65e5\u671f", contentstyle),    # 檢查日期
+           Paragraph(str(data["\u57fa\u672c\u8cc7\u6599"]["\u6aa2\u67e5\u65e5\u671f"]), contentstyle)]]    # 基本資料 檢查日期
+
+    element.append(Title)
+    element.append(Spacer(1, 27))
+    element.append(Table(P0, colWidths=(90, 300),
+                   style=[("BOX", (0, 0), (-1, -1), 1.5, colors.black),
+                          ("GRID", (0, 0), (-1, -1), 0.5, colors.black)]))
+    element.append(Spacer(1, 10))
+
+    # Table of inspections
+
+    element.append(Paragraph("<b>1\u3001\u67e5\u9a57\u7d50\u679c\u8868</b>", subtitleStyle))    # 1、查驗結果表
+    element.append(Spacer(1, 13))
+
+    # Spacing
+
+    # 橫向鋼筋
+    mean_spacing_list = []
+    median_spacing_list = []
+    error_count = 0
+    for spacing in report_horizontal.values():
+        mean_spacing_list.append(spacing['mean'])
+        median_spacing_list.append(spacing['median'])
+    mean_spacings = np.mean(mean_spacing_list)
+    median_spacings = np.median(median_spacing_list)
+    for i, (mean, median) in enumerate(zip(mean_spacing_list, median_spacing_list)):
+        condition_mean = abs(mean - mean_spacings) > args.tolerance_bias or abs(mean - mean_spacings)/mean_spacings > args.tolerance_ratio
+        condition_median = abs(median - median_spacings) > args.tolerance_bias or abs(median - median_spacings)/median_spacings > args.tolerance_ratio
+        if condition_mean or condition_median:
+            error_count += 1
+
+    """
+    for i in data["Spacing"]["statistics"]["group_mean"]:
+        mean.append(i)
+    for i in data["Spacing"]["statistics"]["group_std"]:
+        std.append(i)
+    for i in range(len(mean)):
+        P1.append((round(mean[i], 2), round(std[i], 2)))
+    for i in data["Spacing"]["statistics"]["group_max"]:
+        max.append(i)
+    for i in data["Spacing"]["statistics"]["group_min"]:
+        min.append(i)
+    for i in range(len(max)):
+        P2.append((round(max[i], 2), round(min[i], 2)))
+    for key, info in data["Spacing"]["spacing"].items():
+        if info["active_pass"] is False:
+            issued_spacing.append(key)
+    if len(issued_spacing) == 0: issued_spacing = ""
+
+    spacing = [[Paragraph("\u7b8d\u7b4b\u9593\u8ddd", contentstyle1), ""],    # 箍筋間距
+               [Paragraph("\u67e5\u9a57\u6578\u91cf", contentstyle), str(data["Spacing"]["statistics"]["num_spacing"])],    # 查驗數量
+               [Paragraph("\u5e73\u5747\u503c\u3001\u6a19\u6e96\u5dee", contentstyle), str(P1)],    # 平均值、標準差
+               [Paragraph("\u6700\u5927\u503c\u3001\u6700\u5c0f\u503c", contentstyle), str(P2)],    # 最大值、最小值
+               [Paragraph("\u7f3a\u5931\u6578\u91cf\u8207\u9805\u76ee", contentstyle), str(issued_spacing)]]    # 缺失數量與項目
+    """
+
+    P1 = [round(mean_spacings, 2), round(median_spacings, 2)]
+
+    spacing = [
+        [Paragraph("\u6a6b\u5411\u92fc\u7b4b", contentstyle1), ""],    # 橫向鋼筋
+        [Paragraph("\u92fc\u7b4b\u652f\u6578", contentstyle), str(len(report_horizontal) + 1)],    # 鋼筋支數
+        [Paragraph("\u5e73\u5747\u503c\u3001\u4e2d\u4f4d\u6578", contentstyle), str(P1)],    # 平均值、中位數
+        [Paragraph("\u7f3a\u5931\u6578\u91cf", contentstyle), str(error_count)]    # 缺失數量
+    ]
+
+    t = putInTable(spacing)
+    element.append(t)
+    element.append(Spacer(1, 10))
+
+    # 直向鋼筋
+
+    mean_spacing_list = []
+    median_spacing_list = []
+    error_count = 0
+    for spacing in report_vertical.values():
+        mean_spacing_list.append(spacing['mean'])
+        median_spacing_list.append(spacing['median'])
+    mean_spacings = np.mean(mean_spacing_list)
+    median_spacings = np.median(median_spacing_list)
+    for i, (mean, median) in enumerate(zip(mean_spacing_list, median_spacing_list)):
+        condition_mean = abs(mean - mean_spacings) > args.tolerance_bias or abs(mean - mean_spacings)/mean_spacings > args.tolerance_ratio
+        condition_median = abs(median - median_spacings) > args.tolerance_bias or abs(median - median_spacings)/median_spacings > args.tolerance_ratio
+        if condition_mean or condition_median:
+            error_count += 1
+
+    P1= [round(mean_spacings, 2), round(median_spacings, 2)]
+
+    spacing = [
+        [Paragraph("\u76f4\u5411\u92fc\u7b4b", contentstyle1), ""],    # 直向鋼筋
+        [Paragraph("\u92fc\u7b4b\u652f\u6578", contentstyle), str(len(report_vertical) + 1)],    # 鋼筋支數
+        [Paragraph("\u5e73\u5747\u503c\u3001\u4e2d\u4f4d\u6578", contentstyle), str(P1)],    # 平均值、中位數
+        [Paragraph("\u7f3a\u5931\u6578\u91cf", contentstyle), str(error_count)]    # 缺失數量
+    ]
+
+    t = putInTable(spacing)
+    element.append(t)
+    element.append(Spacer(1, 10))
+
+    # Image
+    #element.append(Paragraph("<b>2\u3001\u67e5\u9a57\u7167\u7247</b>", subtitleStyle))
+    #element.append(Spacer(1, 13))
+    #imagedata = data["ImageData"]
+    #image = Im.open(BytesIO(base64.b64decode(imagedata)))
+    #image.save('image.png', 'PNG')
+    #element.append(Image("image.png", 400, 225))
+
+    doc.build(element)
+
 
 
 if __name__ == "__main__":
@@ -1536,6 +1788,7 @@ if __name__ == "__main__":
     parser.add_argument("--tolerance_bias", help="The tolerance bias between the detected spacings and pseudo-ground truth spacings (unit: cm)", type=float, default=5)
     parser.add_argument("--tolerance_ratio", help="The tolerance ratio of pseudo-ground truth spacings", type=float, default=0.2)
     parser.add_argument("-v", "--verbose", help="Whether to show the intermediate inference results", action="store_true", default=False)
-    parser.add_argument("-m", "--model_dir", help="mask r-cnn model dir", default="./mrcnn_model/model_RGB_220310.pth")
+    parser.add_argument("-st", "--structure", type=int, help="Structure of the inspected steel, 0: slab, 1: wall, 2: column, 3: beam (2 and 3 not yet fully supported)")
+    parser.add_argument("-m", "--model_weight", type=str, help="pretrained AI model weight (use date as format, e.g. 0310). If unsure, simply type 0000.")
     args = parser.parse_args()
     main(args)
